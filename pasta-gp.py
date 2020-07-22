@@ -68,7 +68,7 @@ curve.setPen(pg.mkPen(color=(240, 240, 240), width=2))
 data = deque([], 5000)
 ptr = 0
 
-logname = str(input("Reset the MCU, input the filename, and press Return:\n> "))+".csv"
+logname = str(input("Reset the MCU, input the filename, and press Return:\n> "))+".pasta"
 ser = serial.Serial(dev,baud)
 
 def update_ser():
