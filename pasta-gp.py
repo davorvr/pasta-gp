@@ -60,7 +60,7 @@ p.getAxis('bottom').setTickSpacing(0.5, 0.1)
 p.showGrid(y=True, x=True, alpha=0.2)
 
 p.setXRange(-10000, 0)
-p.setYRange(-50, 500)
+p.setYRange(-1500, 50)
 p.setLimits(xMax=0)
 curve = p.plot()
 curve.setPen(pg.mkPen(color=(240, 240, 240), width=2))
