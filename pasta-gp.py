@@ -1,130 +1,240 @@
-#!/usr/bin/python3
-
-import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtGui
-import numpy as np
+import time
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+import threading, queue
+from pathlib import Path
 import serial
 import serial.tools.list_ports
-import time
-import threading
 from collections import deque
+from random import uniform
 import signal
-import subprocess
-signal.signal(signal.SIGINT, signal.SIG_DFL)
-font=QtGui.QFont()
-font.setPixelSize(20)
-from datetime import datetime
 
-port = list(serial.tools.list_ports.grep("10c4:ea60"))
-if not port:
-#    print("hi")
-    raise IOError("Serial device not found!")
-else:
-    dev = port[0][0]
-baud = 115200
+### USER CONFIG START
+device_id = "/dev/ttyUSB0"
+logdir = "data/"
+## REALTIME PLOT CONFIG
+# How many seconds to show on the realtime plot
+t_range = 10
+# Y range in grams (can be negative)
+g_min = -100
+g_max = 5000
+# Tick spacing
+x_tick_spacing = 1
+y_tick_spacing = 1000
+# Enable or disable minor ticks and gridlines
+minor_ticks = True
+### USER CONFIG END
 
-pg.setConfigOptions(antialias=True)
-pg.setConfigOption('background', (50, 50, 50))
-pg.setConfigOption('foreground', (240, 240, 240))
+#matplotlib.use("Qt5Agg")
 
-def handler(msg_type, msg_log_context, msg_string):
-    pass
+maxlen=5000
+q = queue.Queue(maxsize=maxlen)
 
-#QtCore.qInstallMessageHandler(handler)
-app = QtGui.QApplication([])
-view = pg.GraphicsView()
-view.show()
-l = pg.GraphicsLayout()
-view.setCentralItem(l)
-view.setWindowTitle('Load cell real-time plot')
-view.resize(800,400)
-view.move(0,680)
+Path(logdir).mkdir(exist_ok=True)
+massfile = logdir+"mass.json"
 
-p = l.addPlot()
-#p.setDownsampling(mode='peak')
-p.setClipToView(True)
-p.showAxis('right', show=True)
+animalname = str(input("Animal name: "))
+logname = logdir+animalname+".pasta"
+mass = None
+while not mass:
+    try:
+        mass = float(input("Animal mass: "))
+    except ValueError:
+        print("Invalid number!")
 
-p.setLabel('bottom', 'Time (s)')
-p.getAxis('bottom').setScale(10**(-3))
-
-p.setLabel('left', 'Weight offset')
-
-p.getAxis('bottom').setTickSpacing(1, 0.1)
-#p.getAxis('bottom').tickFont = font
-p.getAxis('left').setTickSpacing(50, 5)
-p.getAxis('right').setTickSpacing(50, 5)
-
-p.getAxis('bottom').setTickSpacing(0.5, 0.1)
-
-p.showGrid(y=True, x=True, alpha=0.2)
-
-p.setXRange(-10000, 0)
-p.setYRange(-1500, 50)
-p.setLimits(xMax=0)
-curve = p.plot()
-curve.setPen(pg.mkPen(color=(240, 240, 240), width=2))
-
-data = deque([], 5000)
-ptr = 0
-
-logname = str(input("Reset the MCU, input the filename, and press Return:\n> "))+".pasta"
-ser = serial.Serial(dev,baud)
-
-def update_ser():
-    global data, ser, logname, timer
-    t = threading.currentThread()
-    
-    # discard the first few values
-    temp_timer = datetime.now()
-    while (datetime.now()-temp_timer).seconds<2:
-        ser.readline()
-    
+def read_ser(stop_event):
+    # Load serial device
+    devs = {x.device:x for x in serial.tools.list_ports.comports()}
+    if device_id not in devs:
+        raise IOError("Serial device not found!")
+    else:
+        dev = devs[device_id]
+    baud = 115200
+    ser = serial.Serial(dev,baud)
+    # Open logfile
     logfile = open(logname, "w")
-    timer.start()
-    while getattr(t, "running", True):
-        ser_in = None
-        while ser_in is None:
+    # Flush the serial input buffer and start timer
+    ser.reset_input_buffer()
+    total_time = 0
+    time1 = time.perf_counter()
+    ser_line = None
+    while not stop_event.is_set():
+        while ser_line is None:
             try:
-                ser_in = float(ser.readline())
+                ser_line = ser.readline()
             except ValueError:
                 pass
-        time = timer.elapsed()
-        logfile.write(str(time)+","+str(ser_in)+"\n")
-        data.append({'x': time, 'y': ser_in})
+            else:
+                total_time += time.perf_counter()-time1
+                time1 = time.perf_counter()
+                datapoint = { "x": total_time,
+                              "y": float(ser_line) }
+        ser_line = None
+        logfile.write(str(datapoint["x"])+","+str(datapoint["y"])+"\n")
+        q.put(datapoint)
+    ser.close()
     logfile.close()
 
-def update_plot():
-    global x, y, p, data, curve
-    data_temp = list(data)
-    x = [item['x'] for item in data_temp]
-    y = [item['y'] for item in data_temp]
-    curve.setData(x=x, y=y)
-    curve.setPos(-(timer.elapsed()), 0)
-    # ~ curve.setPos(-(abc), 0)
+def read_ser_dummy(stopper):
+    # Load serial device
+    #devs = {x.device:x for x in serial.tools.list_ports.comports()}
+    #if device_id not in devs:
+        #raise IOError("Serial device not found!")
+    #else:
+        #dev = devs[device_id]
+    #baud = 115200
+    #ser = serial.Serial(dev,baud)
+    # Open logfile
+    #logfile = open(logname, "w")
+    # Flush the serial input buffer and start timer
+    #ser.reset_input_buffer()
+    total_time = 0
+    time1 = time.perf_counter()
+    ser_line = None
+    while not stopper.is_set():
+        while ser_line is None:
+            try:
+                #ser_line = ser.readline()
+                ser_line = str(round(uniform(0,4000), 2))
+                time.sleep(0.0125)
+            except ValueError:
+                pass
+            else:
+                total_time += time.perf_counter()-time1
+                time1 = time.perf_counter()
+                datapoint = { "x": total_time,
+                              "y": float(ser_line) }
+        ser_line = None
+        #logfile.write(str(datapoint["x"])+","+str(datapoint["y"])+"\n")
+        #print(datapoint)
+        q.put(datapoint)
+    #ser.close()
+    #logfile.close()
 
-# ~ timer_ser = pg.QtCore.QTimer()
-# ~ timer_ser.timeout.connect(update_ser)
-# ~ timer_ser.start(0)
+def handle_closeplot(_event):
+    global G_stopper
+    G_stopper.set()
 
-timer_plot = pg.QtCore.QTimer()
-timer_plot.timeout.connect(update_plot)
-timer_plot.start(10)
+def handle_sigint(_sig, _frame):
+    global G_stopper
+    G_stopper.set()
 
-#if __name__ == '__main__':
-#    import sys
-#    if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
-#        QtGui.QApplication.instance().exec_()
+class BlitManager:
+    def __init__(self, canvas, animated_artists=()):
+        """
+        Parameters
+        ----------
+        canvas : FigureCanvasAgg
+            The canvas to work with, this only works for sub-classes of the Agg
+            canvas which have the `~FigureCanvasAgg.copy_from_bbox` and
+            `~FigureCanvasAgg.restore_region` methods.
 
-logthread = threading.Thread(target=update_ser)
-logthread.running = True
-timer = QtCore.QTime()
-logthread.start()
-app.exec_()
+        animated_artists : Iterable[Artist]
+            List of the artists to manage
+        """
+        self.canvas = canvas
+        self._bg = None
+        self._artists = []
+
+        for a in animated_artists:
+            self.add_artist(a)
+        # grab the background on every draw
+        self.cid = canvas.mpl_connect("draw_event", self.on_draw)
+
+    def on_draw(self, event):
+        """Callback to register with 'draw_event'."""
+        cv = self.canvas
+        if event is not None:
+            if event.canvas != cv:
+                raise RuntimeError
+        self._bg = cv.copy_from_bbox(cv.figure.bbox)
+        self._draw_animated()
+
+    def add_artist(self, art):
+        """
+        Add an artist to be managed.
+
+        Parameters
+        ----------
+        art : Artist
+
+            The artist to be added.  Will be set to 'animated' (just
+            to be safe).  *art* must be in the figure associated with
+            the canvas this class is managing.
+
+        """
+        if art.figure != self.canvas.figure:
+            raise RuntimeError
+        art.set_animated(True)
+        self._artists.append(art)
+
+    def _draw_animated(self):
+        """Draw all of the animated artists."""
+        fig = self.canvas.figure
+        for a in self._artists:
+            fig.draw_artist(a)
+
+    def update(self):
+        """Update the screen with animated artists."""
+        cv = self.canvas
+        fig = cv.figure
+        # paranoia in case we missed the draw event,
+        if self._bg is None:
+            self.on_draw(None)
+        else:
+            # restore the background
+            cv.restore_region(self._bg)
+            # draw all of the animated artists
+            self._draw_animated()
+            # update the GUI state
+            cv.blit(fig.bbox)
+        # let the GUI event loop process anything it has to do
+        cv.flush_events()
+
+x = deque(maxlen=maxlen)
+y = deque(maxlen=maxlen)
+plt.style.use("ggplot")
+fig, ax = plt.subplots()
+plt.grid(visible=True, which="minor", axis="y", alpha=0.5)
+ax.set_title("PASTA real-time plot")
+ax.set_xlabel("Time [s]")
+ax.set_ylabel("Force [g]")
+ax.xaxis.set_major_locator(ticker.MultipleLocator(x_tick_spacing))
+ax.yaxis.set_major_locator(ticker.MultipleLocator(y_tick_spacing))
+if minor_ticks:
+    ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
+    ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
+
+plot_stopper = threading.Event()
+G_stopper = plot_stopper
+fig.canvas.mpl_connect('close_event', handle_closeplot)
+
+line, = ax.plot(0, 0, animated=True)
+line.set_linewidth(0.7)
+#line.set_color(next(ax._get_lines.prop_cycler)["color"])
+# text = ax.text(0.8,0.5, "")
+
+ax.set_xlim([-t_range, 0])
+ax.set_ylim([g_min, g_max])
+
+bm = BlitManager(fig.canvas, [line])
+plt.show(block=False)
+plt.pause(.1)
+
+ser_stopper = threading.Event()
+ser_thread = threading.Thread(target=read_ser_dummy, args=(ser_stopper,))
+ser_thread.start()
+signal.signal(signal.SIGINT, handle_sigint)
+
+while not plot_stopper.is_set():
+    x_value, y_value = q.get().values()
+    x.appendleft(-x_value)
+    y.append(y_value)
+    line.set_data(x, y)
+    bm.update()
+
 print("Stopping...")
-logthread.running = False
-logthread.join()
-timer_plot.stop()
-ser.close()
-print("Test finished.")
-
+#plt.close("all")
+ser_stopper.set()
+ser_thread.join()
