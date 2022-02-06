@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import time
 import matplotlib
 import matplotlib.pyplot as plt
