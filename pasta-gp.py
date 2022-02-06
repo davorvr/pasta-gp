@@ -77,18 +77,6 @@ def read_ser(stop_event):
     logfile.close()
 
 def read_ser_dummy(stopper):
-    # Load serial device
-    #devs = {x.device:x for x in serial.tools.list_ports.comports()}
-    #if device_id not in devs:
-        #raise IOError("Serial device not found!")
-    #else:
-        #dev = devs[device_id]
-    #baud = 115200
-    #ser = serial.Serial(dev,baud)
-    # Open logfile
-    #logfile = open(logname, "w")
-    # Flush the serial input buffer and start timer
-    #ser.reset_input_buffer()
     total_time = 0
     time1 = time.perf_counter()
     ser_line = None
@@ -106,11 +94,7 @@ def read_ser_dummy(stopper):
                 datapoint = { "x": total_time,
                               "y": float(ser_line) }
         ser_line = None
-        #logfile.write(str(datapoint["x"])+","+str(datapoint["y"])+"\n")
-        #print(datapoint)
         q.put(datapoint)
-    #ser.close()
-    #logfile.close()
 
 def handle_closeplot(_event):
     global G_stopper
@@ -223,7 +207,7 @@ plt.show(block=False)
 plt.pause(.1)
 
 ser_stopper = threading.Event()
-ser_thread = threading.Thread(target=read_ser_dummy, args=(ser_stopper,))
+ser_thread = threading.Thread(target=read_ser, args=(ser_stopper,))
 ser_thread.start()
 signal.signal(signal.SIGINT, handle_sigint)
 
