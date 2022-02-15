@@ -50,7 +50,7 @@ def read_ser(stop_event):
     if device_id not in devs:
         raise IOError("Serial device not found!")
     else:
-        dev = devs[device_id]
+        dev = device_id
     baud = 115200
     ser = serial.Serial(dev,baud)
     # Open logfile
