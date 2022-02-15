@@ -33,16 +33,9 @@ maxlen=5000
 q = queue.Queue(maxsize=maxlen)
 
 Path(logdir).mkdir(exist_ok=True)
-massfile = logdir+"mass.json"
 
 animalname = str(input("Animal name: "))
 logname = logdir+animalname+".pasta"
-mass = None
-while not mass:
-    try:
-        mass = float(input("Animal mass: "))
-    except ValueError:
-        print("Invalid number!")
 
 def read_ser(stop_event):
     # Load serial device
