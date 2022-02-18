@@ -207,7 +207,8 @@ signal.signal(signal.SIGINT, handle_sigint)
 
 while not plot_stopper.is_set():
     x_value, y_value = q.get().values()
-    x.appendleft(-x_value)
+    if len(x) < maxlen:
+        x.appendleft(-x_value)
     y.append(y_value)
     line.set_data(x, y)
     bm.update()
